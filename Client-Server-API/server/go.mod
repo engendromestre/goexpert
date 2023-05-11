@@ -1,4 +1,4 @@
-module github.com/engendromestre/curso-go/challenge/CLient-Server-API
+module github.com/engendromestre/goexpert/CLient-Server-API/server
 
 go 1.20
 
