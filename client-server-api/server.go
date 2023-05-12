@@ -6,6 +6,9 @@ import (
 	"log"
 	"net/http"
 	"time"
+
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 )
 
 type Exchange struct {
@@ -23,12 +26,19 @@ type Exchange struct {
 		Timestamp   string `json:"timestamp"`
 		Create_date string `json:"create_date"`
 	}
+	
 }
 
 func main() {
 	http.HandleFunc("/cotacao", SearchExchangeHandler)
 	http.ListenAndServe(":8080", nil)
-}
+
+	db, err := gorm.Open(sqlite.Open("gorm.db"), &gorm.Config{})
+	if err != nil {
+		panic(err)
+	}
+	db.AutoMigrate(&Exchange{})
+}	
 
 func SearchExchangeHandler(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/cotacao" {
@@ -54,6 +64,7 @@ func SearchExchangeHandler(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(exchange.USDBRL.Bid))
 		select {
 		case <-time.After(10 * time.Millisecond):
+			// register in database here 
 			json.NewEncoder(w).Encode(exchange)
 		}
 	case <-ctx.Done():
