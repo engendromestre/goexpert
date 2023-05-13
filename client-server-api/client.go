@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -15,10 +16,25 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	req.Header.Set("Accept", "application/json")
+
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
 		panic(err)
 	}
 	defer res.Body.Close()
-	io.Copy(os.Stdout, res.Body)
+
+	b, err := io.ReadAll(res.Body)
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Println(string(b))
+
+	file, err := os.Create("cotacao.txt")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error reading the answer: %v\n", err)
+	}
+	defer file.Close()
+	_, err = file.WriteString(fmt.Sprintf("Dólar: %s", string(b)))
 }
