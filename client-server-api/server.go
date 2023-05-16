@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -29,18 +30,18 @@ type Exchange struct {
 }
 
 type ExchangeDB struct {
-	ID          int    `gorm:"primaryKey"`
-	Code        string 
-	Codein      string 
-	Name        string 
-	High        string 
-	Low         string 
-	VarBid      string 
-	PctChange   string 
-	Bid         string 
-	Ask         string 
-	Timestamp   string 
-	Create_date string 
+	ID          int `gorm:"primaryKey"`
+	Code        string
+	Codein      string
+	Name        string
+	High        string
+	Low         string
+	VarBid      string
+	PctChange   string
+	Bid         string
+	Ask         string
+	Timestamp   string
+	Create_date string
 }
 
 func main() {
@@ -55,66 +56,70 @@ func SearchExchangeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := r.Context()
 	log.Println("Request Initiate")
+	ctx, cancel := context.WithTimeout(ctx, 200*time.Millisecond)
+	defer cancel()
 	defer log.Println("Request Finished")
-	select {
-	case <-time.After(200 * time.Millisecond):
-		// print in command line of the server (stdout)
-		log.Println("Request successfully processed")
-		// print in browser
-		exchange, error := SearchExchange()
-		if error != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(exchange.USDBRL.Bid))
-		select {
-		case <-time.After(10 * time.Millisecond):
-			// register in database here
-			CreateExchange(exchange)
-		}
-	case <-ctx.Done():
-		log.Println("Request Cancelled by Client")
+
+	res, err := SearchExchange(ctx)
+	if err != nil {
+		log.Println("Error consuming API")
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(res.USDBRL.Bid))
+
+	ctxDB, cancel := context.WithTimeout(ctx, 10*time.Millisecond)
+	// register in database here
+	err = CreateExchange(ctxDB, res)
+	if err != nil {
+		log.Println("Error writing record")
 	}
 }
 
-func CreateExchange(exchange *Exchange) error {
+func CreateExchange(ctx context.Context, exchange *Exchange) error {
 	db, err := gorm.Open(sqlite.Open("database.db"), &gorm.Config{})
 	if err != nil {
 		panic(err)
 	}
 	db.AutoMigrate(&ExchangeDB{})
 
-	db.Create(&ExchangeDB {     
-		Code: exchange.USDBRL.Code,       
-		Codein: exchange.USDBRL.Codein,     
-		Name: exchange.USDBRL.Name,       
-		High: exchange.USDBRL.High,       
-		Low: exchange.USDBRL.Low,        
-		VarBid: exchange.USDBRL.VarBid,    
-		PctChange: exchange.USDBRL.PctChange,  
-		Bid: exchange.USDBRL.Bid,        
-		Ask: exchange.USDBRL.Ask,        
-		Timestamp: exchange.USDBRL.Timestamp,
+	db.WithContext(ctx).Create(&ExchangeDB{
+		Code:        exchange.USDBRL.Code,
+		Codein:      exchange.USDBRL.Codein,
+		Name:        exchange.USDBRL.Name,
+		High:        exchange.USDBRL.High,
+		Low:         exchange.USDBRL.Low,
+		VarBid:      exchange.USDBRL.VarBid,
+		PctChange:   exchange.USDBRL.PctChange,
+		Bid:         exchange.USDBRL.Bid,
+		Ask:         exchange.USDBRL.Ask,
+		Timestamp:   exchange.USDBRL.Timestamp,
 		Create_date: exchange.USDBRL.Create_date,
 	})
 	// select all
 	var exchangesDB []ExchangeDB
-	db.Find(&exchangesDB)
+	if err := db.Find(&exchangesDB).Error; err != nil {
+		return err
+	}
 	for _, ext := range exchangesDB {
 		fmt.Println(ext)
 	}
-
 	return nil
 }
 
-func SearchExchange() (*Exchange, error) {
-	resp, error := http.Get("https://economia.awesomeapi.com.br/json/last/USD-BRL")
+func SearchExchange(ctx context.Context) (*Exchange, error) {
+	req, error := http.NewRequestWithContext(ctx, "GET", "https://economia.awesomeapi.com.br/json/last/USD-BRL", nil)
+	if error != nil {
+		return nil, error
+	}
+	resp, error := http.DefaultClient.Do(req)
 	if error != nil {
 		return nil, error
 	}
 	defer resp.Body.Close()
+
 	body, error := ioutil.ReadAll(resp.Body)
 	if error != nil {
 		return nil, error
