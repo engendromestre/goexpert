@@ -70,9 +70,9 @@ func SearchExchangeHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(res.USDBRL.Bid))
 
-	ctxDB, cancel := context.WithTimeout(ctx, 10*time.Millisecond)
+	ctx, cancel = context.WithTimeout(ctx, 10*time.Nanosecond)
 	// register in database here
-	err = CreateExchange(ctxDB, res)
+	err = CreateExchange(ctx, res)
 	if err != nil {
 		log.Println("Error writing record")
 	}
@@ -81,11 +81,12 @@ func SearchExchangeHandler(w http.ResponseWriter, r *http.Request) {
 func CreateExchange(ctx context.Context, exchange *Exchange) error {
 	db, err := gorm.Open(sqlite.Open("database.db"), &gorm.Config{})
 	if err != nil {
-		panic(err)
+		return err
 	}
+
 	db.AutoMigrate(&ExchangeDB{})
 
-	db.WithContext(ctx).Create(&ExchangeDB{
+	if err := db.WithContext(ctx).Create(&ExchangeDB{
 		Code:        exchange.USDBRL.Code,
 		Codein:      exchange.USDBRL.Codein,
 		Name:        exchange.USDBRL.Name,
@@ -97,7 +98,11 @@ func CreateExchange(ctx context.Context, exchange *Exchange) error {
 		Ask:         exchange.USDBRL.Ask,
 		Timestamp:   exchange.USDBRL.Timestamp,
 		Create_date: exchange.USDBRL.Create_date,
-	})
+	}).Error; err != nil {
+		return err
+	}
+
+
 	// select all
 	var exchangesDB []ExchangeDB
 	if err := db.Find(&exchangesDB).Error; err != nil {
