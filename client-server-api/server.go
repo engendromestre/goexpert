@@ -102,7 +102,6 @@ func CreateExchange(ctx context.Context, exchange *Exchange) error {
 		return err
 	}
 
-
 	// select all
 	var exchangesDB []ExchangeDB
 	if err := db.Find(&exchangesDB).Error; err != nil {
