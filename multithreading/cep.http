@@ -1,1 +1,0 @@
-GET http://localhost:8080?cep=18601120 HTTP/1.1
